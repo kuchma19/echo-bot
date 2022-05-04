@@ -1,0 +1,6 @@
+.stack-work/
+*~
+/echo-bot.cabal
+.vscode
+.idea
+.history
