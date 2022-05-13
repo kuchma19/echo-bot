@@ -57,14 +57,15 @@ spec =
       responses `shouldBe` replicate newRepCount (MessageResponse comment)
 
     it "should output the help text for /help command" $ do
-      let helpText = "My help text"
+      let helpText = "I'm EchoBot. I will repeat your messages.\
+        \ You can choose how many times I will repeat using the command /repeat."
       let config = stubConfig {confHelpReply = helpText}
       let h = handleWith config
       responses <- runBotWithConfig config $ respond h $ MessageEvent "/help"
       responses `shouldBe` [MessageResponse helpText]
 
     it "should output the predefined menu title for /repeat command" $ do
-      let title = "My title"
+      let title = "How many times will I repeat your messages?"
       let config = stubConfig {confRepeatReply = title}
       let h = handleWith config
       responses <- runBotWithConfig config $ respond h $ MessageEvent "/repeat"

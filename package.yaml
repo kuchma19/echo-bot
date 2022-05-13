@@ -1,10 +1,10 @@
 name:                echo-bot
 version:             0.1.0.0
-github:              "unknown/unknown"
+github:              "kuchma19/echo-bot"
 license:             BSD3
-author:              "John Doe"
-maintainer:          "unknown@example.com"
-copyright:           "John Doe"
+author:              "Andrey Kuchma"
+maintainer:          "andand80323@gmail.com"
+copyright:           "Andrey Kuchma"
 
 extra-source-files:
 - README.md
@@ -24,6 +24,10 @@ dependencies:
 - mtl
 - QuickCheck
 - hspec
+- lens
+- lens-aeson
+- bytestring
+- http-conduit
 
 ghc-options:
 - -Wall

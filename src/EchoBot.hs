@@ -130,24 +130,32 @@ respond h (MessageEvent message)
   | otherwise = respondWithEchoedMessage h message
 
 isCommand :: Handle m a -> T.Text -> a -> Bool
-isCommand h _ message = case hTextFromMessage h message of
+isCommand h textCommand message = case hTextFromMessage h message of
   Nothing -> False
-  Just _ -> error "Not implemented"
+  Just textMessage -> textMessage == textCommand
 
 handleHelpCommand :: Monad m => Handle m a -> m [Response a]
 handleHelpCommand h = do
   Logger.logInfo (hLogHandle h) "Got the help command"
-  error "Not implemented"
+  return
+    [ MessageResponse $
+        hMessageFromText
+          h
+          "I'm EchoBot. I will repeat your messages.\
+          \ You can choose how many times I will repeat using the command /repeat."
+    ]
 
 handleSettingRepetitionCount :: Monad m => Handle m a -> Int -> m [Response a]
 handleSettingRepetitionCount h count = do
   Logger.logInfo (hLogHandle h) $ "The user has set the repetition count to " .< count
-  error "Not implemented"
+  hModifyState' h (const $ State count)
+  return [MessageResponse $ hMessageFromText h "You changed how many times I will repeat your massages."]
 
 handleRepeatCommand :: Monad m => Handle m a -> m [Response a]
 handleRepeatCommand h = do
   Logger.logInfo (hLogHandle h) "Got the repeat command"
-  error "Not implemented"
+  return
+    [MenuResponse "How many times will I repeat your messages?" (map (\i -> (i, SetRepetitionCountEvent i)) [1 .. 5])]
 
 respondWithEchoedMessage :: Monad m => Handle m a -> a -> m [Response a]
 respondWithEchoedMessage h message = do
