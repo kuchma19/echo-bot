@@ -11,6 +11,7 @@ module EchoBot
     State,
     Handle (..),
     Config (..),
+    RepetitionCount
   )
 where
 
