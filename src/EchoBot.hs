@@ -137,12 +137,10 @@ isCommand h textCommand message = case hTextFromMessage h message of
 handleHelpCommand :: Monad m => Handle m a -> m [Response a]
 handleHelpCommand h = do
   Logger.logInfo (hLogHandle h) "Got the help command"
+  let cnfig = hConfig h
+      helpMessage = confHelpReply cnfig
   return
-    [ MessageResponse $
-        hMessageFromText
-          h
-          "I'm EchoBot. I will repeat your messages.\
-          \ You can choose how many times I will repeat using the command /repeat."
+    [ MessageResponse $ hMessageFromText h helpMessage
     ]
 
 handleSettingRepetitionCount :: Monad m => Handle m a -> Int -> m [Response a]
@@ -154,11 +152,19 @@ handleSettingRepetitionCount h count = do
 handleRepeatCommand :: Monad m => Handle m a -> m [Response a]
 handleRepeatCommand h = do
   Logger.logInfo (hLogHandle h) "Got the repeat command"
+  let cnfig = hConfig h
+      repetitionCount = T.pack $ show (confRepetitionCount cnfig)
+      repetitionCountMessageWithCount = confRepeatReply cnfig
+      repetitionCountMessage = T.replace "{count}" repetitionCount repetitionCountMessageWithCount
   return
-    [MenuResponse "How many times will I repeat your messages?" (map (\i -> (i, SetRepetitionCountEvent i)) [1 .. 5])]
+    [MenuResponse
+      repetitionCountMessage
+      (map (\i -> (i, SetRepetitionCountEvent i)) [1 .. 5])]
 
 respondWithEchoedMessage :: Monad m => Handle m a -> a -> m [Response a]
 respondWithEchoedMessage h message = do
   Logger.logInfo (hLogHandle h) $
     "Echoing user input: " .< fromMaybe "<multimedia?>" (hTextFromMessage h message)
-  error "Not implemented"
+  state <- hGetState h
+  let repetitionCount = stRepetitionCount state
+  return $ replicate repetitionCount $ MessageResponse message
