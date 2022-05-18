@@ -35,9 +35,12 @@ doSomethingBasedOnResponce :: BotHandle -> EB.Response T.Text -> IO ()
 doSomethingBasedOnResponce _ (EB.MessageResponse message) = TIO.putStrLn message
 doSomethingBasedOnResponce botHandle (EB.MenuResponse title events) = doWhileBadInput
   where 
+    badInput = do
+      TIO.putStrLn "You wrote incorrect number. You can try again."
+      doWhileBadInput
     doWhileBadInput = do
       TIO.putStrLn title
-      TIO.putStr "Write number from 1 to 5: "
+      TIO.putStrLn "Write number from 1 to 5: "
       textNumber <- getLine
       let maybeNumber = (readMaybe textNumber) :: (Maybe Int)
       case maybeNumber of
@@ -47,8 +50,8 @@ doSomethingBasedOnResponce botHandle (EB.MenuResponse title events) = doWhileBad
             let event = findEvent number events
             responces <- EB.respond botHandle event
             doSomethingWithResponces botHandle responces
-          else doWhileBadInput
-        Nothing -> doWhileBadInput
+          else badInput
+        Nothing -> badInput
 
 doSomethingWithResponces :: BotHandle -> [EB.Response T.Text] -> IO ()
 doSomethingWithResponces botHandle = mapM_ (doSomethingBasedOnResponce botHandle)
