@@ -28,6 +28,9 @@ dependencies:
 - lens-aeson
 - bytestring
 - http-conduit
+- filepath
+- directory
+- time
 
 ghc-options:
 - -Wall

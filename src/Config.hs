@@ -12,7 +12,7 @@ import qualified ConfigurationTypes
 import qualified EchoBot
 import qualified Logger.Impl
 import qualified Logger ( Level (..) )
-import qualified System.IO (stderr)
+import qualified System.IO (Handle, openFile, IOMode (..))
 
 -- | Gets the bot config. In any case it can provide reasonable
 -- default values.
@@ -23,10 +23,15 @@ getBotConfig = return $ EchoBot.Config {
   EchoBot.confRepetitionCount = 1
 }
 
+openFileHandle :: IO System.IO.Handle
+openFileHandle = do
+  let fileName = "log"
+  System.IO.openFile fileName System.IO.AppendMode
+
 getLoggerConfig :: IO Logger.Impl.Config
 getLoggerConfig = return $ Logger.Impl.Config {
-  Logger.Impl.confFileHandle = System.IO.stderr,
-  Logger.Impl.confMinLevel = Logger.Info
+  Logger.Impl.confFileHandle = openFileHandle,
+  Logger.Impl.confMinLevel = Logger.Error
 }
 
 getFrontEndType :: IO ConfigurationTypes.FrontEndType
