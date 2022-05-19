@@ -14,11 +14,8 @@ import qualified Data.Text.IO as TIO
 import qualified EchoBot as EB
 import Text.Read (readMaybe)
 
-
-type BotHandle = EB.Handle IO T.Text
-
-newtype Handle = Handle
-  { hBotHandle :: BotHandle
+newtype Handle m = Handle
+  { hBotHandle :: EB.Handle m T.Text
   }
 
 betweenNum :: (Ord a, Num a) => a -> a -> a -> Bool
@@ -31,42 +28,45 @@ findEvent repetitionCount ((repetitionCountCurrentEvent, currentEvent) : otherEv
   then currentEvent
   else findEvent repetitionCount otherEvents
 
-doSomethingBasedOnResponce :: BotHandle -> EB.Response T.Text -> IO ()
-doSomethingBasedOnResponce _ (EB.MessageResponse message) = TIO.putStrLn message
-doSomethingBasedOnResponce botHandle (EB.MenuResponse title events) = doWhileBadInput
+doSomethingBasedOnResponce :: Monad m => m T.Text -> (T.Text -> m ()) -> EB.Handle m T.Text -> EB.Response T.Text -> m ()
+doSomethingBasedOnResponce _ displayOutput _ (EB.MessageResponse message) = displayOutput message
+doSomethingBasedOnResponce getInput displayOutput botHandle (EB.MenuResponse title events) = doWhileBadInput
   where 
     badInput = do
-      TIO.putStrLn "You wrote incorrect number. You can try again."
+      displayOutput "You wrote incorrect number. You can try again."
       doWhileBadInput
     doWhileBadInput = do
-      TIO.putStrLn title
-      TIO.putStrLn "Write number from 1 to 5: "
-      textNumber <- getLine
-      let maybeNumber = (readMaybe textNumber) :: (Maybe Int)
+      displayOutput title
+      displayOutput "Write number from 1 to 5: "
+      textNumber <- getInput
+      let maybeNumber = (readMaybe (T.unpack textNumber)) :: (Maybe Int)
       case maybeNumber of
         Just number -> 
           if betweenNum 1 5 number
           then do
             let event = findEvent number events
             responces <- EB.respond botHandle event
-            doSomethingWithResponces botHandle responces
+            doSomethingWithResponces getInput displayOutput botHandle responces
           else badInput
         Nothing -> badInput
 
-doSomethingWithResponces :: BotHandle -> [EB.Response T.Text] -> IO ()
-doSomethingWithResponces botHandle = mapM_ (doSomethingBasedOnResponce botHandle)
+doSomethingWithResponces :: Monad m => m T.Text -> (T.Text -> m ()) -> EB.Handle m T.Text -> [EB.Response T.Text] -> m ()
+doSomethingWithResponces getInput displayOutput botHandle = mapM_ (doSomethingBasedOnResponce getInput displayOutput botHandle)
 
-readAndSendMessage :: Handle -> IO ()
-readAndSendMessage handle = do
+readAndSendMessage :: Monad m => m T.Text -> (T.Text -> m ()) -> Handle m -> m ()
+readAndSendMessage getInput displayOutput handle = do
   let botHandle = hBotHandle handle
-  line <- TIO.getLine
+  line <- getInput
   responces <- EB.respond botHandle (EB.MessageEvent line)
-  doSomethingWithResponces botHandle responces
+  doSomethingWithResponces getInput displayOutput botHandle responces
 
-run :: Handle -> IO ()
-run handle = do
-  TIO.putStrLn "Welcome to the echo-bot!"
+runImp :: Monad m => m T.Text -> (T.Text -> m ()) -> Handle m -> m ()
+runImp getInput displayOutput handle = do
+  displayOutput "Welcome to the echo-bot!"
   -- 1. Read a line from the console.
   -- 2. Send it to the bot, get its response and output it.
   -- 3. Go to 1.
-  mapM_ readAndSendMessage (repeat handle)
+  mapM_ (readAndSendMessage getInput displayOutput) (repeat handle)
+
+run :: Handle IO -> IO ()
+run = runImp TIO.getLine TIO.putStrLn
