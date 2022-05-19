@@ -7,6 +7,7 @@ module Logger.Impl
   )
 where
 
+import Control.Monad (when)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Logger
@@ -36,9 +37,7 @@ makeLogMessage level message = do
 logWith :: Config -> Logger.Level -> T.Text -> IO ()
 logWith config level message = do
   let minLevel = confMinLevel config
-  if level <= minLevel
-  then do
+  when (level <= minLevel) $ do
     logMessage <- makeLogMessage level message
     outputHandle <- confFileHandle config
     TIO.hPutStrLn outputHandle logMessage
-  else return ()

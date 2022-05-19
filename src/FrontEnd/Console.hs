@@ -5,6 +5,8 @@
 -- output etc).
 module FrontEnd.Console
   ( run,
+    runImp,
+    readAndSendMessage,
     Handle (..),
   )
 where
