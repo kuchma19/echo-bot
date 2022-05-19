@@ -7,7 +7,6 @@ where
 
 import Control.Monad (when)
 import Control.Monad.State (State, get, put, execState)
--- import Test.Hspec (Expectation, Spec, describe, it, shouldBe, shouldNotBe, shouldSatisfy)
 import Test.Hspec (Spec, describe, it, shouldBe)
 import qualified Data.Text as T
 import qualified FrontEnd.Console

@@ -31,6 +31,8 @@ dependencies:
 - filepath
 - directory
 - time
+- configurator
+- unordered-containers
 
 ghc-options:
 - -Wall
