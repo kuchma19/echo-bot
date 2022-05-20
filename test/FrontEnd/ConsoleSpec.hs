@@ -22,7 +22,7 @@ spec =
       let finishConsole = evalOutputWithConsole console
       getInputConsole finishConsole `shouldBe` []
       getOutputConsole finishConsole `shouldBe` 
-        ["[Info] Echoing user input: \"one\"", 
+        [ "[Info] Echoing user input: \"one\"", 
           "one",
           "[Info] Echoing user input: \"two\"",
           "two"
