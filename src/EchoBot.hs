@@ -153,8 +153,9 @@ handleSettingRepetitionCount h count = do
 handleRepeatCommand :: Monad m => Handle m a -> m [Response a]
 handleRepeatCommand h = do
   Logger.logInfo (hLogHandle h) "Got the repeat command"
+  s <- hGetState h
   let cnfig = hConfig h
-      repetitionCount = T.pack $ show (confRepetitionCount cnfig)
+      repetitionCount = T.pack $ show (stRepetitionCount s)
       repetitionCountMessageWithCount = confRepeatReply cnfig
       repetitionCountMessage = T.replace "{count}" repetitionCount repetitionCountMessageWithCount
   return
