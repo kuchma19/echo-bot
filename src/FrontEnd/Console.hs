@@ -27,13 +27,13 @@ findEvent :: EB.RepetitionCount -> [(EB.RepetitionCount, EB.Event T.Text)] -> EB
 findEvent _ [] = EB.MessageEvent "You entered the correct number, but something went wrong."
 findEvent repetitionCount ((repetitionCountCurrentEvent, currentEvent) : otherEvents) =
   if repetitionCount == repetitionCountCurrentEvent
-  then currentEvent
-  else findEvent repetitionCount otherEvents
+    then currentEvent
+    else findEvent repetitionCount otherEvents
 
 doSomethingBasedOnResponce :: Monad m => m T.Text -> (T.Text -> m ()) -> EB.Handle m T.Text -> EB.Response T.Text -> m ()
 doSomethingBasedOnResponce _ displayOutput _ (EB.MessageResponse message) = displayOutput message
 doSomethingBasedOnResponce getInput displayOutput botHandle (EB.MenuResponse title events) = doWhileBadInput
-  where 
+  where
     badInput = do
       displayOutput "You wrote incorrect number. You can try again."
       doWhileBadInput
@@ -41,15 +41,15 @@ doSomethingBasedOnResponce getInput displayOutput botHandle (EB.MenuResponse tit
       displayOutput title
       displayOutput "Write number from 1 to 5: "
       textNumber <- getInput
-      let maybeNumber = (readMaybe (T.unpack textNumber)) :: (Maybe Int)
+      let maybeNumber = readMaybe (T.unpack textNumber) :: (Maybe Int)
       case maybeNumber of
-        Just number -> 
+        Just number ->
           if betweenNum 1 5 number
-          then do
-            let event = findEvent number events
-            responces <- EB.respond botHandle event
-            doSomethingWithResponces getInput displayOutput botHandle responces
-          else badInput
+            then do
+              let event = findEvent number events
+              responces <- EB.respond botHandle event
+              doSomethingWithResponces getInput displayOutput botHandle responces
+            else badInput
         Nothing -> badInput
 
 doSomethingWithResponces :: Monad m => m T.Text -> (T.Text -> m ()) -> EB.Handle m T.Text -> [EB.Response T.Text] -> m ()

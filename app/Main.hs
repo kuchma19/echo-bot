@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Main
   ( main,
   )
@@ -11,6 +13,7 @@ import qualified EchoBot
 import qualified FrontEnd.Console
 import qualified Logger
 import qualified Logger.Impl
+import qualified FrontEnd.Telegram
 import System.Exit (die)
 
 main :: IO ()
@@ -18,8 +21,10 @@ main = do
   withLogHandle $ \logHandle -> do
     frontEnd <- Config.getFrontEndType
     case frontEnd of
-      ConfigurationTypes.TelegramFrontEnd ->
-        error "Not implemented"
+      ConfigurationTypes.TelegramFrontEnd -> do
+        botHandle <- makeBotHandleForTextAndStickers logHandle
+        configTelegram <- Config.getTelegramConfig
+        runTelegramFrontEnd botHandle configTelegram
       ConfigurationTypes.ConsoleFrontEnd -> do
         botHandle <- makeBotHandleForPlainText logHandle
         runConsoleFrontEnd botHandle
@@ -28,6 +33,14 @@ runConsoleFrontEnd :: EchoBot.Handle IO T.Text -> IO ()
 runConsoleFrontEnd botHandle =
   FrontEnd.Console.run
     FrontEnd.Console.Handle {FrontEnd.Console.hBotHandle = botHandle}
+
+runTelegramFrontEnd :: EchoBot.Handle IO FrontEnd.Telegram.Message -> FrontEnd.Telegram.Config -> IO ()
+runTelegramFrontEnd botHandle conf = 
+  FrontEnd.Telegram.run
+    FrontEnd.Telegram.Handle {
+      FrontEnd.Telegram.hBotHandle = botHandle,
+      FrontEnd.Telegram.hConfig = conf
+    }
 
 withLogHandle :: (Logger.Handle IO -> IO ()) -> IO ()
 withLogHandle f = do
@@ -62,4 +75,21 @@ makeBotHandleForPlainText logHandle = do
         EchoBot.hConfig = botConfig,
         EchoBot.hTextFromMessage = Just,
         EchoBot.hMessageFromText = id
+      }
+
+makeBotHandleForTextAndStickers :: Logger.Handle IO -> IO (EchoBot.Handle IO FrontEnd.Telegram.Message)
+makeBotHandleForTextAndStickers logHandle = do
+  botConfig <- Config.getBotConfig
+  initialState <- either (die . T.unpack) pure $ EchoBot.makeState botConfig
+  stateRef <- newIORef initialState
+  pure
+    EchoBot.Handle
+      { EchoBot.hGetState = readIORef stateRef,
+        EchoBot.hModifyState' = modifyIORef' stateRef,
+        EchoBot.hLogHandle = logHandle,
+        EchoBot.hConfig = botConfig,
+        EchoBot.hTextFromMessage = \case
+            FrontEnd.Telegram.Text text -> Just text
+            FrontEnd.Telegram.Sticker _ -> Nothing,
+        EchoBot.hMessageFromText = FrontEnd.Telegram.Text
       }

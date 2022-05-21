@@ -33,6 +33,9 @@ dependencies:
 - time
 - configurator
 - unordered-containers
+- network-uri
+- containers
+- bytestring
 
 ghc-options:
 - -Wall

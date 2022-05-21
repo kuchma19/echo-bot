@@ -11,7 +11,7 @@ module EchoBot
     State,
     Handle (..),
     Config (..),
-    RepetitionCount
+    RepetitionCount,
   )
 where
 
@@ -159,9 +159,10 @@ handleRepeatCommand h = do
       repetitionCountMessageWithCount = confRepeatReply cnfig
       repetitionCountMessage = T.replace "{count}" repetitionCount repetitionCountMessageWithCount
   return
-    [MenuResponse
-      repetitionCountMessage
-      (map (\i -> (i, SetRepetitionCountEvent i)) [1 .. 5])]
+    [ MenuResponse
+        repetitionCountMessage
+        (map (\i -> (i, SetRepetitionCountEvent i)) [1 .. 5])
+    ]
 
 respondWithEchoedMessage :: Monad m => Handle m a -> a -> m [Response a]
 respondWithEchoedMessage h message = do

@@ -10,10 +10,10 @@ where
 import Control.Monad (when)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import qualified Logger
-import Logger ((.<))
-import qualified System.IO
 import Data.Time.Clock (getCurrentTime)
+import Logger ((.<))
+import qualified Logger
+import qualified System.IO
 
 data Config = Config
   { -- | A file handle to output formatted log messages to with
