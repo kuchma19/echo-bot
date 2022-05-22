@@ -167,7 +167,7 @@ handleRepeatCommand h = do
 respondWithEchoedMessage :: Monad m => Handle m a -> a -> m [Response a]
 respondWithEchoedMessage h message = do
   Logger.logInfo (hLogHandle h) $
-    "Echoing user input: " .< fromMaybe "<multimedia?>" (hTextFromMessage h message)
+    "Echoing user input: " .< fromMaybe "<sticker>" (hTextFromMessage h message)
   state <- hGetState h
   let repetitionCount = stRepetitionCount state
   return $ replicate repetitionCount $ MessageResponse message

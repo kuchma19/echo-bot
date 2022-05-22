@@ -26,6 +26,7 @@ dependencies:
 - hspec
 - lens
 - lens-aeson
+- aeson
 - bytestring
 - http-conduit
 - filepath
@@ -36,12 +37,14 @@ dependencies:
 - network-uri
 - containers
 - bytestring
+- scientific
+- either
 
-ghc-options:
-- -Wall
-- -Werror
-- -Wcompat
-- -Wincomplete-uni-patterns
+# ghc-options:
+# - -Wall
+# - -Werror
+# - -Wcompat
+# - -Wincomplete-uni-patterns
 
 library:
   source-dirs: src

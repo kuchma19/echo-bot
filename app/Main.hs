@@ -11,9 +11,9 @@ import Data.IORef (modifyIORef', newIORef, readIORef)
 import qualified Data.Text as T
 import qualified EchoBot
 import qualified FrontEnd.Console
+import qualified FrontEnd.Telegram as FET
 import qualified Logger
 import qualified Logger.Impl
-import qualified FrontEnd.Telegram
 import System.Exit (die)
 
 main :: IO ()
@@ -22,9 +22,8 @@ main = do
     frontEnd <- Config.getFrontEndType
     case frontEnd of
       ConfigurationTypes.TelegramFrontEnd -> do
-        botHandle <- makeBotHandleForTextAndStickers logHandle
         configTelegram <- Config.getTelegramConfig
-        runTelegramFrontEnd botHandle configTelegram
+        runTelegramFrontEnd logHandle configTelegram
       ConfigurationTypes.ConsoleFrontEnd -> do
         botHandle <- makeBotHandleForPlainText logHandle
         runConsoleFrontEnd botHandle
@@ -34,13 +33,16 @@ runConsoleFrontEnd botHandle =
   FrontEnd.Console.run
     FrontEnd.Console.Handle {FrontEnd.Console.hBotHandle = botHandle}
 
-runTelegramFrontEnd :: EchoBot.Handle IO FrontEnd.Telegram.Message -> FrontEnd.Telegram.Config -> IO ()
-runTelegramFrontEnd botHandle conf = 
-  FrontEnd.Telegram.run
-    FrontEnd.Telegram.Handle {
-      FrontEnd.Telegram.hBotHandle = botHandle,
-      FrontEnd.Telegram.hConfig = conf
-    }
+runTelegramFrontEnd :: Logger.Handle IO -> FET.Config -> IO ()
+runTelegramFrontEnd logHandle conf =
+  FET.run conf $ \userId ->
+    FET.Handle
+      { FET.hUser =
+          FET.User
+            { FET.id = userId,
+              FET.handle = makeBotHandleForTextAndStickers logHandle
+            }
+      }
 
 withLogHandle :: (Logger.Handle IO -> IO ()) -> IO ()
 withLogHandle f = do
@@ -77,7 +79,7 @@ makeBotHandleForPlainText logHandle = do
         EchoBot.hMessageFromText = id
       }
 
-makeBotHandleForTextAndStickers :: Logger.Handle IO -> IO (EchoBot.Handle IO FrontEnd.Telegram.Message)
+makeBotHandleForTextAndStickers :: Logger.Handle IO -> IO (EchoBot.Handle IO FET.Message)
 makeBotHandleForTextAndStickers logHandle = do
   botConfig <- Config.getBotConfig
   initialState <- either (die . T.unpack) pure $ EchoBot.makeState botConfig
@@ -89,7 +91,7 @@ makeBotHandleForTextAndStickers logHandle = do
         EchoBot.hLogHandle = logHandle,
         EchoBot.hConfig = botConfig,
         EchoBot.hTextFromMessage = \case
-            FrontEnd.Telegram.Text text -> Just text
-            FrontEnd.Telegram.Sticker _ -> Nothing,
-        EchoBot.hMessageFromText = FrontEnd.Telegram.Text
+          FET.Text text -> Just text
+          FET.Sticker _ -> Nothing,
+        EchoBot.hMessageFromText = FET.Text
       }
