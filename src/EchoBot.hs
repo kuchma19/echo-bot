@@ -6,7 +6,7 @@
 module EchoBot
   ( makeState,
     respond,
-    Event (MessageEvent),
+    Event (MessageEvent, SetRepetitionCountEvent),
     Response (..),
     State,
     Handle (..),
@@ -107,7 +107,7 @@ type RepetitionCount = Int
 -- their bots.
 newtype State = State
   { stRepetitionCount :: RepetitionCount
-  }
+  } deriving Show
 
 -- | Creates an initial, default bot state for a user.
 makeState :: Config -> Either Text State
@@ -126,7 +126,7 @@ respond :: Monad m => Handle m a -> Event a -> m [Response a]
 respond h (SetRepetitionCountEvent repetitionCount) =
   handleSettingRepetitionCount h repetitionCount
 respond h (MessageEvent message)
-  | isCommand h "/help" message = handleHelpCommand h
+  | isCommand h "/help" message || isCommand h "/start" message = handleHelpCommand h
   | isCommand h "/repeat" message = handleRepeatCommand h
   | otherwise = respondWithEchoedMessage h message
 

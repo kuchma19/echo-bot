@@ -39,7 +39,8 @@ runTelegramFrontEnd logHandle conf =
     FET.Handle
       { FET.hUser =
           FET.User
-            { FET.id = userId,
+            { FET.id_ = userId,
+              FET.typeNextMessage = FET.RepeatedMessage,
               FET.handle = makeBotHandleForTextAndStickers logHandle
             }
       }
