@@ -23,13 +23,6 @@ newtype Handle m = Handle
 betweenNum :: (Ord a, Num a) => a -> a -> a -> Bool
 betweenNum l r a = l <= a && a <= r
 
-findEvent :: EB.RepetitionCount -> [(EB.RepetitionCount, EB.Event T.Text)] -> EB.Event T.Text
-findEvent _ [] = EB.MessageEvent "You entered the correct number, but something went wrong."
-findEvent repetitionCount ((repetitionCountCurrentEvent, currentEvent) : otherEvents) =
-  if repetitionCount == repetitionCountCurrentEvent
-    then currentEvent
-    else findEvent repetitionCount otherEvents
-
 doSomethingBasedOnResponce :: Monad m => m T.Text -> (T.Text -> m ()) -> EB.Handle m T.Text -> EB.Response T.Text -> m ()
 doSomethingBasedOnResponce _ displayOutput _ (EB.MessageResponse message) = displayOutput message
 doSomethingBasedOnResponce getInput displayOutput botHandle (EB.MenuResponse title events) = doWhileBadInput
@@ -46,7 +39,7 @@ doSomethingBasedOnResponce getInput displayOutput botHandle (EB.MenuResponse tit
         Just number ->
           if betweenNum 1 5 number
             then do
-              let event = findEvent number events
+              let event = EB.findEvent number botHandle events
               responces <- EB.respond botHandle event
               doSomethingWithResponces getInput displayOutput botHandle responces
             else badInput

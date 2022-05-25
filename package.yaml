@@ -39,6 +39,7 @@ dependencies:
 - bytestring
 - scientific
 - either
+- wreq
 
 ghc-options:
 - -Wall

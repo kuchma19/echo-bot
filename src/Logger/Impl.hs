@@ -37,7 +37,7 @@ makeLogMessage level message = do
 logWith :: Config -> Logger.Level -> T.Text -> IO ()
 logWith config level message = do
   let minLevel = confMinLevel config
-  when (level <= minLevel) $ do
+  when (level >= minLevel) $ do
     logMessage <- makeLogMessage level message
     outputHandle <- confFileHandle config
     TIO.hPutStrLn outputHandle logMessage

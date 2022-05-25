@@ -20,12 +20,8 @@ import qualified EchoBot
 import qualified FrontEnd.Telegram
 import qualified Logger (Level (..))
 import qualified Logger.Impl
-import Network.HTTP.Simple (Request, parseRequestThrow)
-import System.Directory (createDirectoryIfMissing)
 import System.Exit (die)
-import System.FilePath ((</>))
-import qualified System.IO (Handle, IOMode (..), openFile)
-import qualified Data.ByteString.Char8 as B
+import System.IO (stdout)
 
 validateRepetitionCount :: Int -> IO EchoBot.RepetitionCount
 validateRepetitionCount repetitionCount =
@@ -34,11 +30,6 @@ validateRepetitionCount repetitionCount =
     else do
       TIO.putStrLn "Invalid bot_messages.repetition_count in configurations.cfg. Must be number from 1 to 5."
       return 1
-
-openFileHandle :: FilePath -> FilePath -> IO System.IO.Handle
-openFileHandle pathDirectory fileName = do
-  createDirectoryIfMissing True pathDirectory
-  System.IO.openFile (pathDirectory </> fileName) System.IO.AppendMode
 
 validateLogLevel :: T.Text -> IO Logger.Level
 validateLogLevel levelText = do
@@ -74,13 +65,11 @@ getLoggerConfig :: IO Logger.Impl.Config
 getLoggerConfig = do
   conf <- getConfig
   mp <- C.getMap conf
-  let pathDirectory = fromMaybe "." (CT.convert $ mp ! "log.directory")
-      fileName = fromMaybe "configurations.cfg" (CT.convert $ mp ! "log.file_name")
-      levelText = fromMaybe "error" (CT.convert $ mp ! "log.min_level")
+  let levelText = fromMaybe "error" (CT.convert $ mp ! "log.min_level")
   level <- validateLogLevel levelText
   return $
     Logger.Impl.Config
-      { Logger.Impl.confFileHandle = openFileHandle (T.unpack pathDirectory) (T.unpack fileName),
+      { Logger.Impl.confFileHandle = return stdout,
         Logger.Impl.confMinLevel = level
       }
 
@@ -105,19 +94,11 @@ getTelegramConfig :: IO FrontEnd.Telegram.Config
 getTelegramConfig = do
   tokenConf <- C.load [C.Required "token.cfg"]
   mp <- C.getMap tokenConf
-  let tokenMaybe = CT.convert $ mp ! "token" :: Maybe T.Text
+  let tokenMaybe = CT.convert $ mp ! "token" :: Maybe String
   case tokenMaybe of
     Just token -> case token of
       "<token>" -> die "You have to write token in file 'token.cfg'."
       _ -> do
-        telegramUri <- makeTelegramURI
-        return $ FrontEnd.Telegram.Config telegramUri (B.pack $ T.unpack $ "bot" <> token)
-    Nothing -> die "File token.cfg must contain a token in format 'token = <your token>'."
+        return $ FrontEnd.Telegram.Config $ "https://api.telegram.org/bot" <> token <> "/"
+    Nothing -> die "File token.cfg must contain a token in format 'token = \"<your token>\"'."
 
-makeTelegramURI :: IO Request
-makeTelegramURI = do
-  let requestTelegram = "https://api.telegram.org/"
-      maybeRequest = parseRequestThrow (T.unpack requestTelegram) :: Maybe Request
-  case maybeRequest of
-    Just request -> return request
-    Nothing -> die "Wrong token in token.cfg"

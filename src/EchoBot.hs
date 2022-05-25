@@ -6,6 +6,7 @@
 module EchoBot
   ( makeState,
     respond,
+    findEvent,
     Event (MessageEvent, SetRepetitionCountEvent),
     Response (..),
     State,
@@ -108,6 +109,13 @@ type RepetitionCount = Int
 newtype State = State
   { stRepetitionCount :: RepetitionCount
   } deriving Show
+
+findEvent :: Monad m => RepetitionCount -> Handle m a -> [(RepetitionCount, Event a)] -> Event a
+findEvent _ handle [] = MessageEvent $ hMessageFromText handle "You entered the correct number, but something went wrong."
+findEvent repetitionCount handle ((repetitionCountCurrentEvent, currentEvent) : otherEvents) =
+  if repetitionCount == repetitionCountCurrentEvent
+    then currentEvent
+    else findEvent repetitionCount handle otherEvents
 
 -- | Creates an initial, default bot state for a user.
 makeState :: Config -> Either Text State

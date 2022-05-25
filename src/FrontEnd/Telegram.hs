@@ -11,23 +11,27 @@ module FrontEnd.Telegram
   )
 where
 
+import Control.Lens ((.~))
 import Control.Lens.Fold ((^?))
+import qualified Control.Lens.Getter
+import Control.Lens.Lens ((&))
 import Control.Monad (when)
 import qualified Control.Monad.State as ST (MonadState (get), StateT (..), evalStateT, modify)
 import Control.Monad.Trans (liftIO)
 import Data.Aeson (KeyValue ((.=)), ToJSON (toJSON), Value, encode, object)
 import qualified Data.Aeson as DA (Value (Number, String))
 import Data.Aeson.Lens (AsValue, key, nth)
-import qualified Data.ByteString.Char8 as B
-import Data.ByteString.Lazy (toStrict)
+import qualified Data.ByteString.Lazy as B
 import Data.Either.Combinators (rightToMaybe)
 import Data.Map (Map, adjust, empty, insert, notMember, (!))
-import Data.Maybe (isJust, mapMaybe)
+import Data.Maybe (fromMaybe, isJust, mapMaybe)
+import qualified Data.Monoid
 import qualified Data.Scientific as DS (Scientific, floatingOrInteger)
 import qualified Data.Text as T
 import EchoBot (Response (..))
 import qualified EchoBot as EB
-import Network.HTTP.Simple (QueryItem, Request, addToRequestQueryString, getResponseBody, httpBS, httpNoBody, setRequestPath)
+import Network.Wreq (FormParam ((:=)))
+import qualified Network.Wreq as NW
 import Text.Read (readMaybe)
 
 type UserId = Integer
@@ -44,8 +48,7 @@ newtype Handle = Handle
   { hUser :: User
   }
 
-data TypeNextMessage = RepeatedMessage | RepetitionCount
-  deriving (Eq)
+data TypeNextMessage = RepeatedMessage | RepetitionCount [(EB.RepetitionCount, EB.Event Message)]
 
 data User = User
   { id_ :: UserId,
@@ -63,9 +66,8 @@ data MessageInformation = MessageInformation
 instance Show User where
   show User {id_ = id__} = "[UserId: " <> show id__ <> "]"
 
-data Config = Config
-  { confRequest :: Request,
-    confTokenPath :: B.ByteString
+newtype Config = Config
+  { confRequest :: String
   }
 
 data Message = Text T.Text | Sticker StickerId
@@ -90,18 +92,18 @@ newtype Bottom = Bottom T.Text
 instance ToJSON Bottom where
   toJSON (Bottom text_) = object ["text" .= text_]
 
-makeQueryItem :: (B.ByteString, B.ByteString) -> QueryItem
-makeQueryItem (a, b) = (a, Just b)
-
-makeGetUpdatesRequest :: Request -> B.ByteString -> Integer -> Request
-makeGetUpdatesRequest telegramRequest token beginOffset =
+makeGetUpdatesRequest :: (Show a, Num a) => [Char] -> a -> IO (Maybe B.ByteString)
+makeGetUpdatesRequest telegramRequest beginOffset =
   let methodGetUpdates = "getUpdates"
-      timeout = ("timeout", "10")
-      offset = ("offset", B.pack $ show $ beginOffset + 1)
-      allowedUpdates = ("allowed_updates", "[\"update_id\", \"message\"]")
-      telegramRequestUpdates = setRequestPath (token <> "/" <> methodGetUpdates) telegramRequest
-      query = map makeQueryItem [timeout, offset, allowedUpdates]
-   in addToRequestQueryString query telegramRequestUpdates
+      params =
+        NW.defaults
+          & NW.param "timeout" .~ ["10"]
+          & NW.param "offset" .~ [T.pack $ show $ beginOffset + 1]
+          & NW.param "allowed_updates" .~ ["update_id", "message"]
+      telegramRequestUpdates = telegramRequest <> methodGetUpdates
+   in do
+        result <- NW.getWith params telegramRequestUpdates
+        return $ result ^? NW.responseBody
 
 checkPosition :: AsValue s => (Int, s) -> Bool
 checkPosition (pos, jsonBody) = isJust $ jsonBody ^? key "result" . nth pos
@@ -124,15 +126,19 @@ getSticker pos = getResultInPos pos . key "message" . key "sticker" . key "file_
 getUpdateId :: (AsValue t, Applicative f) => Int -> (Value -> f Value) -> t -> f t
 getUpdateId pos = getResultInPos pos . key "update_id"
 
+sToInteger :: DS.Scientific -> Maybe Integer
+sToInteger = rightToMaybe . (DS.floatingOrInteger :: DS.Scientific -> Either Double Integer)
+
+getWith :: s -> (Int -> Control.Lens.Getter.Getting (Data.Monoid.First Value) s Value) -> Int -> Maybe Integer
+getWith jsonBody getter pos = do
+  DA.Number updateIdS <- jsonBody ^? getter pos
+  sToInteger updateIdS
+
 valuesToMessage :: AsValue s => s -> Int -> Maybe MessageInformation
 valuesToMessage jsonBody pos = do
-  DA.Number userIdS <- jsonBody ^? getUserId pos
-  DA.Number updateIdS <- jsonBody ^? getUpdateId pos
-  DA.Number chatIdS <- jsonBody ^? getChatId pos
-  let sToInteger = rightToMaybe . (DS.floatingOrInteger :: DS.Scientific -> Either Double Integer)
-  userId_ <- sToInteger userIdS
-  updateId_ <- sToInteger updateIdS
-  chatId_ <- sToInteger chatIdS
+  userId_ <- getWith jsonBody getUserId pos
+  updateId_ <- getWith jsonBody getUpdateId pos
+  chatId_ <- getWith jsonBody getChatId pos
   message_ <- case jsonBody ^? getText pos of
     Just (DA.String text_) -> Just $ Text text_
     _ -> case jsonBody ^? getSticker pos of
@@ -146,48 +152,47 @@ valuesToMessage jsonBody pos = do
         message = message_
       }
 
-getUpdates :: Request -> B.ByteString -> Integer -> IO [MessageInformation]
-getUpdates telegramRequest token offset = do
-  let requestUpdates = makeGetUpdatesRequest telegramRequest token offset
-  response <- httpBS requestUpdates
-  let jsonBody = getResponseBody response
-      goodPositions = takeWhile checkPosition $ zip [0 ..] (repeat jsonBody)
-      messages = mapMaybe (\(pos, js) -> valuesToMessage js pos) goodPositions
-  B.putStrLn jsonBody
-  return messages
+getMaxUpdateId :: AsValue s => Integer -> [(Int, s)] -> Integer
+getMaxUpdateId def [] = def
+getMaxUpdateId def ((pos, jsonBody) : xs) = max (fromMaybe def (getWith jsonBody getUpdateId pos)) (getMaxUpdateId def xs)
 
-makeSendRequest :: Request -> B.ByteString -> ChatId -> Message -> Bool -> StateM Request
-makeSendRequest telegramRequest token chatId_ (Text text_) withKeyBoard =
+getUpdates :: String -> UpdateId -> IO (UpdateId, [MessageInformation])
+getUpdates telegramRequest offset = do
+  Just jsonBody <- makeGetUpdatesRequest telegramRequest offset
+  let goodPositions = takeWhile checkPosition $ zip [0 ..] (repeat jsonBody)
+      newOffset = getMaxUpdateId offset goodPositions
+      messages = mapMaybe (\(pos, js) -> valuesToMessage js pos) goodPositions
+  return (newOffset, messages)
+
+makeSendRequest :: String -> ChatId -> Message -> Bool -> IO (Maybe B.ByteString)
+makeSendRequest telegramRequest chatId_ (Text text_) withKeyBoard =
   let methodSendMessage = "sendMessage"
-      chatIdQ = ("chat_id", B.pack $ show chatId_)
-      textQ = ("text", B.pack $ T.unpack text_)
-      telegramRequestSend = setRequestPath (token <> "/" <> methodSendMessage) telegramRequest
-      keybrQ =
-        ("reply_markup", toStrict $ encode keybr)
+      telegramRequestSend = telegramRequest <> methodSendMessage
+      chatIdQ = "chat_id" := show chatId_
+      textQ = "text" := text_
+      keybrQ = "reply_markup" := encode keybr
       keybr =
         Keyboard
           { bottoms = [map (Bottom . T.pack . show) [1 :: Int .. 5]],
             resize_keyboard = True,
             one_time_keyboard = True
           }
-      queryWitoutKeybr = [chatIdQ, textQ]
-      query =
-        map makeQueryItem $
-          if withKeyBoard
-            then keybrQ : queryWitoutKeybr
-            else queryWitoutKeybr
-   in return $ addToRequestQueryString query telegramRequestSend
-makeSendRequest telegramRequest token chatId_ (Sticker stickerId) _ =
+      maybeKeybrQ = [keybrQ | withKeyBoard]
+   in do
+        result <- NW.post telegramRequestSend $ chatIdQ : textQ : maybeKeybrQ
+        return $ result ^? NW.responseBody
+makeSendRequest telegramRequest chatId_ (Sticker stickerId) _ =
   let methodSendSticker = "sendSticker"
-      chatIdQ = ("chat_id", B.pack $ show chatId_)
-      stickerIdQ = ("sticker", B.pack $ T.unpack stickerId)
-      telegramRequestSend = setRequestPath (token <> "/" <> methodSendSticker) telegramRequest
-      query = map makeQueryItem [chatIdQ, stickerIdQ]
-   in return $ addToRequestQueryString query telegramRequestSend
+      telegramRequestSend = telegramRequest <> methodSendSticker
+      chatIdQ = "chat_id" := show chatId_
+      stickerIdQ = "sticker" := stickerId
+   in do
+        result <- NW.post telegramRequestSend [chatIdQ, stickerIdQ]
+        return $ result ^? NW.responseBody
 
-changeNextMessageType :: User -> User
-changeNextMessageType user@User {typeNextMessage = RepeatedMessage} = user {typeNextMessage = RepetitionCount}
-changeNextMessageType user@User {typeNextMessage = RepetitionCount} = user {typeNextMessage = RepeatedMessage}
+changeNextMessageType :: [(EB.RepetitionCount, EB.Event Message)] -> User -> User
+changeNextMessageType events user@User {typeNextMessage = RepeatedMessage} = user {typeNextMessage = RepetitionCount events}
+changeNextMessageType _ user@User {typeNextMessage = RepetitionCount _} = user {typeNextMessage = RepeatedMessage}
 
 setNewHandle :: EB.Handle IO Message -> User -> User
 setNewHandle newHandle user = user {handle = return newHandle}
@@ -197,19 +202,6 @@ getUser userId_ = do
   mapa <- ST.get
   return $ mapa ! userId_
 
-getTypeMesssageUser :: UserId -> StateM TypeNextMessage
-getTypeMesssageUser userId_ = do
-  user <- getUser userId_
-  return $ typeNextMessage user
-
-isRepeatedMessage :: UserId -> StateM Bool
-isRepeatedMessage userId_ = do
-  typeMessage <- getTypeMesssageUser userId_
-  return $ typeMessage == RepeatedMessage
-
-ifM :: Monad m => m Bool -> m a -> m a -> m a
-ifM p t f = p >>= (\p' -> if p' then t else f)
-
 goodNumberMessage :: Message -> StateM (Maybe Int)
 goodNumberMessage (Text num) = return $ do
   number <- readMaybe (T.unpack num)
@@ -218,68 +210,46 @@ goodNumberMessage (Text num) = return $ do
     else Nothing
 goodNumberMessage _ = return Nothing
 
-handleResponse :: Request -> B.ByteString -> ChatId -> UserId -> EB.Response Message -> StateM ()
-handleResponse telegramRequest token chatId_ userId_ (MessageResponse message_) =
-  ifM
-    (isRepeatedMessage userId_)
-    ( do
-        req <- makeSendRequest telegramRequest token chatId_ message_ False
-        _ <- httpNoBody req
-        return ()
-    )
-    ( do
-        maybeInt <- goodNumberMessage message_
-        liftIO $ print maybeInt
-        case maybeInt of
-          Just num -> do
-            user <- getUser userId_
-            userHandle <- liftIO $ handle user
-            st1 <- liftIO $ EB.hGetState userHandle
-            liftIO $ print st1
-            responses <- liftIO $ EB.respond userHandle (EB.SetRepetitionCountEvent num)
-            st2 <- liftIO $ EB.hGetState userHandle
-            liftIO $ print st2
-            ST.modify $ adjust (changeNextMessageType . setNewHandle userHandle) userId_
-            handleResponses telegramRequest token chatId_ userId_ responses
-          Nothing -> return ()
-    )
-handleResponse telegramRequest token chatId_ userId_ (MenuResponse title _) = do
-  req <- makeSendRequest telegramRequest token chatId_ (Text title) True
-  ST.modify $ adjust changeNextMessageType userId_
-  _ <- httpNoBody req
+handleResponse :: String -> ChatId -> UserId -> EB.Response Message -> StateM ()
+handleResponse telegramRequest chatId_ _ (MessageResponse message_) = do
+  _ <- liftIO $ makeSendRequest telegramRequest chatId_ message_ False
+  return ()
+handleResponse telegramRequest chatId_ userId_ (MenuResponse title events) = do
+  _ <- liftIO $ makeSendRequest telegramRequest chatId_ (Text title) True
+  ST.modify $ adjust (changeNextMessageType events) userId_
   return ()
 
-handleResponses ::
-  Foldable t =>
-  Request ->
-  B.ByteString ->
-  ChatId ->
-  UserId ->
-  t (Response Message) ->
-  ST.StateT (Map UserId User) IO ()
-handleResponses telegramRequest token chatId_ userId_ = mapM_ (handleResponse telegramRequest token chatId_ userId_)
+handleResponses :: Foldable t => String -> ChatId -> UserId -> t (Response Message) -> ST.StateT (Map UserId User) IO ()
+handleResponses telegramRequest chatId_ userId_ = mapM_ (handleResponse telegramRequest chatId_ userId_)
 
-sendMessage :: Request -> B.ByteString -> (UserId -> Handle) -> MessageInformation -> StateM ()
-sendMessage telegramRequest token getNewUserByUserId (MessageInformation userId_ _ chatId_ message_) = do
+getResponsesFromUser :: User -> Message -> StateM [Response Message]
+getResponsesFromUser User {typeNextMessage = RepeatedMessage, handle = handle_} message_ = liftIO $ do
+  botHandle <- handle_
+  EB.respond botHandle (EB.MessageEvent message_)
+getResponsesFromUser User {typeNextMessage = RepetitionCount events, handle = handle_, id_ = userId_} message_ = do
+  maybeNum <- goodNumberMessage message_
+  botHandle <- liftIO handle_
+  case maybeNum of
+    Just num -> do
+      let event = EB.findEvent num botHandle events
+      ST.modify $ adjust (changeNextMessageType [] . setNewHandle botHandle) userId_
+      liftIO $ EB.respond botHandle event
+    Nothing -> return [EB.MessageResponse $ Text "You wrote wrong number."]
+
+takeAnswerFromBotAndSendMessage :: String -> (UserId -> Handle) -> MessageInformation -> StateM ()
+takeAnswerFromBotAndSendMessage telegramRequest getNewUserByUserId (MessageInformation userId_ _ chatId_ message_) = do
   mapaUsersNotModify <- ST.get
   when (notMember userId_ mapaUsersNotModify) $ do
     ST.modify $ insert userId_ (hUser $ getNewUserByUserId userId_)
-  mapaUsers <- ST.get
-  botHandle <- liftIO $ handle $ mapaUsers ! userId_
-  responses <- liftIO $ EB.respond botHandle (EB.MessageEvent message_)
-  handleResponses telegramRequest token chatId_ userId_ responses
-
-getMaxUpdateId :: UpdateId -> [MessageInformation] -> UpdateId
-getMaxUpdateId def [] = def
-getMaxUpdateId def (MessageInformation {updateId = updateId_} : xs) = max updateId_ (getMaxUpdateId def xs)
+  currentUser <- getUser userId_
+  responses <- getResponsesFromUser currentUser message_
+  handleResponses telegramRequest chatId_ userId_ responses
 
 readAndSendMessage :: UpdateId -> Config -> (UserId -> Handle) -> StateM ()
 readAndSendMessage offset conf getNewUserByUserId = do
   let telegramRequest = confRequest conf
-      tokenPath = confTokenPath conf
-  listUpdates <- liftIO $ getUpdates telegramRequest tokenPath offset
-  mapM_ (sendMessage telegramRequest tokenPath getNewUserByUserId) listUpdates
-  let newOffset = getMaxUpdateId offset listUpdates
+  (newOffset, listUpdates) <- liftIO $ getUpdates telegramRequest offset
+  mapM_ (takeAnswerFromBotAndSendMessage telegramRequest getNewUserByUserId) listUpdates
   readAndSendMessage newOffset conf getNewUserByUserId
 
 run :: Config -> (UserId -> Handle) -> IO ()
