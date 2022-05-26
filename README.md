@@ -23,7 +23,7 @@ for run `echo-bot`.
 
 Start configurations bot is in `configurations.cfg`.
 
-1. **bot_type** contains when the bot will work. The value of field `type` must be `"telegram"` or `"console"`. If the value is `"telegram"` then the bot will run in your telegram bot. If the value is `"console"` then the bot will run in the console.
+1. **bot_type** contains where the bot will work. The value of field `type` must be `"telegram"` or `"console"`. If the value is `"telegram"` then the bot will run in your telegram bot. If the value is `"console"` then the bot will run in the console.
 
 2. **bot_messages** contains default messages for `/help` and `/repeat` command as well as a default value for the repetition count.
 
