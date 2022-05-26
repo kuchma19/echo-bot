@@ -108,7 +108,8 @@ type RepetitionCount = Int
 -- their bots.
 newtype State = State
   { stRepetitionCount :: RepetitionCount
-  } deriving Show
+  }
+  deriving (Show)
 
 findEvent :: Monad m => RepetitionCount -> Handle m a -> [(RepetitionCount, Event a)] -> Event a
 findEvent _ handle [] = MessageEvent $ hMessageFromText handle "You entered the correct number, but something went wrong."

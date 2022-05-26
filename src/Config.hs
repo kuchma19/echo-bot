@@ -101,4 +101,3 @@ getTelegramConfig = do
       _ -> do
         return $ FrontEnd.Telegram.Config $ "https://api.telegram.org/bot" <> token <> "/"
     Nothing -> die "File token.cfg must contain a token in format 'token = \"<your token>\"'."
-
